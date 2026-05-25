@@ -158,8 +158,8 @@ function PracticeContent() {
   const [blankCount,   setBlankCount]   = useState(2);
   const [blanks,       setBlanks]       = useState<BlankItem[]>([]);
   const [blankInputs,  setBlankInputs]  = useState<string[]>([]);
-
   const [hintLevel, setHintLevel] = useState(0);
+  const [highlightedBlankIdx, setHighlightedBlankIdx] = useState<number | null>(null);
 
   const textareaRef = useRef<HTMLTextAreaElement>(null);
   const audioRef    = useRef<HTMLAudioElement>(null);
@@ -295,7 +295,7 @@ function PracticeContent() {
     if (nextIdx < sentences.length) {
       setCurrentIdx(nextIdx);
       setInputText(''); setShowComparison(false);
-      setBlankInputs([]); setHintLevel(0);
+      setBlankInputs([]); setHintLevel(0); setHighlightedBlankIdx(null);
       const audio = audioRef.current;
       const s = sentences[nextIdx];
       if (audio && s?.audio_start_time != null) {
@@ -305,7 +305,7 @@ function PracticeContent() {
     } else {
       // 全部完成：同步进度并弹出结算
       setInputText(''); setShowComparison(false);
-      setBlankInputs([]); setHintLevel(0);
+      setBlankInputs([]); setHintLevel(0); setHighlightedBlankIdx(null);
       const audio = audioRef.current;
       if (audio) { audio.pause(); setIsPlaying(false); }
       syncToServer();
@@ -537,7 +537,22 @@ function PracticeContent() {
     <>
       <audio
         ref={audioCallbackRef}
-        src={`${API}/materials/${material.id}/audio`}
+        src={(() => {
+          if (!material.audio_url) return '';
+          if (material.audio_url.startsWith('http')) {
+            // OSS URL：只对路径部分编码（处理中文目录名）
+            try {
+              const url = new URL(material.audio_url);
+              // decodeURIComponent 先解码，再 encodeURIComponent 重新编码，最后还原斜杠
+              url.pathname = url.pathname.split('/').map(seg => encodeURIComponent(decodeURIComponent(seg))).join('/');
+              return url.toString();
+            } catch {
+              return material.audio_url;
+            }
+          }
+          // 本地开发走后端代理
+          return `${API}/materials/${material.id}/audio`;
+        })()}
         preload="auto"
       />
 
@@ -901,24 +916,55 @@ function PracticeContent() {
                             setBlankInputs(next);
                           }}
                           onKeyDown={(e) => {
-                            if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); handleSubmit(); }
-                            // Tab 跳到下一个空格
                             if (e.key === 'Tab') {
                               e.preventDefault();
                               const inputs = document.querySelectorAll<HTMLInputElement>('.blank-input');
-                              const idx = Array.from(inputs).findIndex((el) => el === e.target);
-                              if (idx >= 0 && idx < inputs.length - 1) inputs[idx + 1].focus();
+                              const curIdx = Array.from(inputs).findIndex((el) => el === e.target);
+                              if (curIdx >= 0 && curIdx < inputs.length - 1) inputs[curIdx + 1].focus();
+                            }
+
+                            if (e.key === 'Enter' && !e.shiftKey) {
+                              e.preventDefault();
+                              const inputs = Array.from(document.querySelectorAll<HTMLInputElement>('.blank-input'));
+                              const curIdx = inputs.findIndex((el) => el === e.target);
+
+                              // 1. 当前空后面还有未填的空 → 跳到下一个未填的空
+                              const nextEmpty = inputs.findIndex((el, i) => i > curIdx && !el.value.trim());
+                              if (nextEmpty >= 0) {
+                                inputs[nextEmpty].focus();
+                                setHighlightedBlankIdx(nextEmpty);
+                                setTimeout(() => setHighlightedBlankIdx(null), 1500);
+                                return;
+                              }
+
+                              // 2. 当前空前面还有未填的空 → 高亮第一个未填的空
+                              const firstEmpty = inputs.findIndex((el) => !el.value.trim());
+                              if (firstEmpty >= 0) {
+                                inputs[firstEmpty].focus();
+                                setHighlightedBlankIdx(firstEmpty);
+                                setTimeout(() => setHighlightedBlankIdx(null), 1500);
+                                return;
+                              }
+
+                              // 3. 所有空都填了 → 提交答案
+                              handleSubmit();
                             }
                           }}
                           placeholder="___"
                           className="blank-input"
                           style={{
                             width: `${Math.max(word.length, 3) + 1}ch`,
-                            border: 'none', borderBottom: '2.5px solid #0d6735',
-                            background: 'rgba(13,103,53,0.06)', borderRadius: 4,
-                            outline: 'none', textAlign: 'center',
+                            border: 'none',
+                            borderBottom: highlightedBlankIdx === blankIdx
+                              ? '2.5px solid #e05c1e'   // 橙色：提示需要填写
+                              : '2.5px solid #0d6735',  // 绿色：正常
+                            background: highlightedBlankIdx === blankIdx
+                              ? 'rgba(224,92,30,0.08)'
+                              : 'rgba(13,103,53,0.06)',
+                            borderRadius: 4, outline: 'none', textAlign: 'center',
                             fontSize: 'inherit', color: '#0d6735', fontWeight: 700,
                             padding: '2px 4px', flexShrink: 0,
+                            transition: 'border-color 0.2s, background 0.2s',
                           }}
                         />
                       );
