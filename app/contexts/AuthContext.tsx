@@ -10,7 +10,12 @@ export interface AuthUser {
   id: number;
   email: string;
   nickname: string;
-  avatar_url: string | null;
+  avatar_url?: string;
+  // ✅ 补充以下两个字段的类型声明
+  phone?: string | null;
+  purpose?: string | null;
+  role?: string;
+  created_at?: string;
 }
 
 interface AuthContextType {
@@ -34,7 +39,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   // 应用启动时：从 localStorage 读取 Token，先做本地过期校验，再调用 /auth/me 恢复会话
   useEffect(() => {
     const restoreSession = async () => {
-      const token     = localStorage.getItem('access_token');
+      const token = localStorage.getItem('access_token');
       const expiresAt = localStorage.getItem('token_expires_at');
 
       if (!token) {
@@ -78,7 +83,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   // expiresAt 由后端返回（毫秒时间戳），没有则默认 1 天后过期
   const login = useCallback((token: string, userData: AuthUser, expiresAt?: number) => {
     const expiry = expiresAt ?? Date.now() + 24 * 60 * 60 * 1000;
-    localStorage.setItem('access_token',    token);
+    localStorage.setItem('access_token', token);
     localStorage.setItem('token_expires_at', String(expiry));
     setUser(userData);
   }, []);
