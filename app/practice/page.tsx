@@ -3,6 +3,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import Link from 'next/link';
 import { useSearchParams, useRouter } from 'next/navigation';
+import { Suspense } from 'react';
 import { PenLine, X, Loader2 } from 'lucide-react';
 import { HomeNavbar } from '../components/HomeNavbar';
 import { useAuth } from '../contexts/AuthContext';
@@ -112,6 +113,18 @@ function fmt(s: number) {
 
 // ─── Page ─────────────────────────────────────────────────────────────────────
 export default function PracticePage() {
+  return (
+    <Suspense fallback={
+      <div style={{ minHeight: '100vh', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+        <div style={{ color: '#5b311e', fontSize: '1.2rem' }}>Loading...</div>
+      </div>
+    }>
+      <PracticeContent />
+    </Suspense>
+  );
+}
+
+function PracticeContent() {
   const searchParams = useSearchParams();
   const router = useRouter();
   const { isLoggedIn, isLoading: authLoading } = useAuth();
