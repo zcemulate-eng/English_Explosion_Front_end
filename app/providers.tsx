@@ -5,10 +5,12 @@
 // 以后如果加 React Query、Toast 等 Provider，都统一加在这里
 
 import { AuthProvider } from './contexts/AuthContext';
+import { OfflineBanner } from './components/OfflineBanner';
 
 export function Providers({ children }: { children: React.ReactNode }) {
   return (
     <AuthProvider>
+      <OfflineBanner />
       {children}
     </AuthProvider>
   );

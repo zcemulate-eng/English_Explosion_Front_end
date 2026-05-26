@@ -3,7 +3,7 @@
 const API = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3001';
 
 import React, { useEffect, useState } from 'react';
-import { X, Clock, BookOpen, Target, Flame, Play, CheckCircle2, Loader2 } from 'lucide-react';
+import { X, Clock, BookOpen, Target, Flame, Play, CheckCircle2, Loader2, AlignLeft } from 'lucide-react';
 import { useRouter } from 'next/navigation';
 import { HomeNavbar } from '../components/HomeNavbar';
 import { WeeklyGoalModal } from '../components/WeeklyGoalModal';
@@ -25,12 +25,17 @@ interface ProgressStats {
   totalHours: string;
   accuracy: number | null;
   streak: number;
+  sentencesCount?: number;
 }
+interface TrendPoint { date: string; accuracy: number }
+interface DailyPoint { date: string; minutes: number }
 interface ProgressData {
   inProgress: ProgressRecord[];
   completed: ProgressRecord[];
   weeklyGoal: WeeklyGoalData | null;
   stats: ProgressStats;
+  accuracyTrend: TrendPoint[];
+  dailyDuration: DailyPoint[];
 }
 
 const StatCard = ({ icon: Icon, title, value }: { icon: React.ElementType, title: string, value: string }) => (
@@ -50,13 +55,58 @@ const CapsuleProgressBar = ({ label, percentage }: { label: string, percentage: 
   </div>
 );
 
+// 准确率趋势折线图（纯 SVG，0–100%）
+const AccuracyTrendChart = ({ data }: { data: TrendPoint[] }) => {
+  if (data.length < 2) {
+    return <p className="text-[#8a6b4a] text-[11px] text-center py-6">Practice on more days to see your trend.</p>;
+  }
+  const W = 320, H = 90, padX = 6, padY = 8;
+  const xs = (i: number) => padX + (i * (W - padX * 2)) / (data.length - 1);
+  const ys = (v: number) => padY + (1 - v / 100) * (H - padY * 2);
+  const line = data.map((d, i) => `${xs(i)},${ys(d.accuracy)}`).join(' ');
+  const area = `${padX},${H - padY} ${line} ${xs(data.length - 1)},${H - padY}`;
+  return (
+    <svg viewBox={`0 0 ${W} ${H}`} className="w-full" preserveAspectRatio="none" style={{ height: 90 }}>
+      {[0, 50, 100].map((g) => (
+        <line key={g} x1={padX} x2={W - padX} y1={ys(g)} y2={ys(g)} stroke="#d2c4a8" strokeWidth="1" strokeDasharray="3 3" />
+      ))}
+      <polygon points={area} fill="#3ca354" opacity="0.15" />
+      <polyline points={line} fill="none" stroke="#2a5732" strokeWidth="2.5" strokeLinejoin="round" strokeLinecap="round" />
+      {data.map((d, i) => (
+        <circle key={i} cx={xs(i)} cy={ys(d.accuracy)} r="3" fill="#2a5732" />
+      ))}
+    </svg>
+  );
+};
+
+// 每日练习时长柱状图（分钟，纯 SVG）
+const DailyDurationChart = ({ data }: { data: DailyPoint[] }) => {
+  if (data.length === 0) {
+    return <p className="text-[#8a6b4a] text-[11px] text-center py-6">No practice time logged yet.</p>;
+  }
+  const max = Math.max(...data.map((d) => d.minutes), 1);
+  return (
+    <div className="flex items-end justify-between gap-[3px] h-[90px] pt-2">
+      {data.map((d, i) => {
+        const h = Math.max((d.minutes / max) * 72, 2);
+        return (
+          <div key={i} className="flex-1 flex flex-col items-center justify-end group relative" title={`${d.date}: ${d.minutes} min`}>
+            <div className="w-full bg-[#3ca354] rounded-t-[3px] border border-[#2a5732]" style={{ height: `${h}px` }} />
+          </div>
+        );
+      })}
+    </div>
+  );
+};
+
 function fmtDate(iso: string) {
   return new Date(iso).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' });
 }
 
 const EMPTY_DATA: ProgressData = {
   inProgress: [], completed: [], weeklyGoal: null,
-  stats: { totalHours: '0', accuracy: null, streak: 0 },
+  stats: { totalHours: '0', accuracy: null, streak: 0, sentencesCount: 0 },
+  accuracyTrend: [], dailyDuration: [],
 };
 
 function ProgressContent() {
@@ -118,11 +168,24 @@ function ProgressContent() {
             </div>
 
             {/* 统计卡片 */}
-            <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mb-5">
-              <StatCard icon={Clock}    title="Total Hours" value={data?.stats.totalHours ?? '0'} />
-              <StatCard icon={BookOpen} title="Materials"   value={String(totalMaterials)} />
-              <StatCard icon={Target}   title="Accuracy"    value={data?.stats.accuracy != null ? `${data.stats.accuracy}%` : '—'} />
-              <StatCard icon={Flame}    title="Streak"      value={data?.stats.streak ? `${data.stats.streak}d` : '—'} />
+            <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-5 gap-4 mb-5">
+              <StatCard icon={Clock}     title="Total Hours" value={data?.stats.totalHours ?? '0'} />
+              <StatCard icon={BookOpen}  title="Materials"   value={String(totalMaterials)} />
+              <StatCard icon={AlignLeft} title="Sentences"   value={String(data?.stats.sentencesCount ?? 0)} />
+              <StatCard icon={Target}    title="Accuracy"    value={data?.stats.accuracy != null ? `${data.stats.accuracy}%` : '—'} />
+              <StatCard icon={Flame}     title="Streak"      value={data?.stats.streak ? `${data.stats.streak}d` : '—'} />
+            </div>
+
+            {/* 趋势分析：准确率趋势 + 每日练习时长 */}
+            <div className="flex flex-col md:flex-row gap-4 mb-4">
+              <div className="bg-[#fdf8e7] rounded-2xl border-[3px] border-[#2a5732] p-4 w-full md:w-1/2">
+                <h3 className="text-[#4a3018] font-bold text-[14px] mb-2">Accuracy Trend</h3>
+                <AccuracyTrendChart data={data?.accuracyTrend ?? []} />
+              </div>
+              <div className="bg-[#fdf8e7] rounded-2xl border-[3px] border-[#2a5732] p-4 w-full md:w-1/2">
+                <h3 className="text-[#4a3018] font-bold text-[14px] mb-2">Daily Practice (min)</h3>
+                <DailyDurationChart data={data?.dailyDuration ?? []} />
+              </div>
             </div>
 
             <div className="flex flex-col md:flex-row gap-4 mb-4">

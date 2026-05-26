@@ -4,7 +4,7 @@ const API = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3001';
 
 import React, { useEffect, useState } from 'react';
 import { HomeNavbar } from '../components/HomeNavbar';
-import { Search, Trash2, Loader2, Download, Filter } from 'lucide-react';
+import { Search, Trash2, Loader2, Download, Pencil, Check, X } from 'lucide-react';
 import { useRouter } from 'next/navigation';
 
 // ─── Types ────────────────────────────────────────────────────────────────────
@@ -12,13 +12,10 @@ import { useRouter } from 'next/navigation';
 interface Note {
   id: number;
   content: string;
-  note_type: string | null;
   created_at: string;
   material: { id: number; title: string };
   sentence: { id: number; content: string; order_index: number } | null;
 }
-
-const NOTE_TYPES = ['all', 'personal', 'difficult_word', 'grammar', 'pronunciation'];
 
 function fmtDate(iso: string) {
   return new Date(iso).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' });
@@ -31,9 +28,10 @@ function NotesContent() {
   const [notes,       setNotes]       = useState<Note[]>([]);
   const [loading,     setLoading]     = useState(true);
   const [searchQuery, setSearchQuery] = useState('');
-  const [filterType,  setFilterType]  = useState('all');
   const [deletingId,  setDeletingId]  = useState<number | null>(null);
-  const [showFilter,  setShowFilter]  = useState(false);
+  const [editingId,   setEditingId]   = useState<number | null>(null);
+  const [editText,    setEditText]    = useState('');
+  const [savingId,    setSavingId]    = useState<number | null>(null);
 
   useEffect(() => {
     const token = localStorage.getItem('access_token');
@@ -64,6 +62,40 @@ function NotesContent() {
     }
   };
 
+  // ── 编辑笔记 ────────────────────────────────────────────────────────────────
+  const startEdit = (note: Note) => {
+    setEditingId(note.id);
+    setEditText(note.content);
+  };
+
+  const cancelEdit = () => {
+    setEditingId(null);
+    setEditText('');
+  };
+
+  const saveEdit = async (id: number) => {
+    const trimmed = editText.trim();
+    if (!trimmed) return;
+    setSavingId(id);
+    try {
+      const token = localStorage.getItem('access_token');
+      const res = await fetch(`${API}/notes/${id}`, {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
+        body: JSON.stringify({ content: trimmed }),
+      });
+      if (res.ok) {
+        const updated = await res.json();
+        setNotes((prev) => prev.map((n) => (n.id === id ? { ...n, content: updated.content } : n)));
+        cancelEdit();
+      }
+    } catch (e) {
+      console.error(e);
+    } finally {
+      setSavingId(null);
+    }
+  };
+
   // ── 导出笔记为 .txt ─────────────────────────────────────────────────────────
   const handleExport = () => {
     const lines: string[] = [
@@ -77,7 +109,6 @@ function NotesContent() {
       lines.push(`[${i + 1}] ${note.material.title}${note.sentence ? ` · Sentence ${note.sentence.order_index}` : ''}`);
       if (note.sentence) lines.push(`  Original: "${note.sentence.content}"`);
       lines.push(`  Note: ${note.content}`);
-      if (note.note_type) lines.push(`  Type: ${note.note_type.replace('_', ' ')}`);
       lines.push(`  Date: ${fmtDate(note.created_at)}`);
       lines.push('');
     });
@@ -91,16 +122,14 @@ function NotesContent() {
     URL.revokeObjectURL(url);
   };
 
-  // ── 搜索 + 类型筛选 ─────────────────────────────────────────────────────────
+  // ── 搜索 ────────────────────────────────────────────────────────────────────
   const filtered = notes.filter((n) => {
     const q = searchQuery.toLowerCase();
-    const matchSearch =
+    return (
       n.content.toLowerCase().includes(q) ||
       n.material.title.toLowerCase().includes(q) ||
-      (n.sentence?.content.toLowerCase().includes(q) ?? false);
-    const matchType =
-      filterType === 'all' || n.note_type === filterType;
-    return matchSearch && matchType;
+      (n.sentence?.content.toLowerCase().includes(q) ?? false)
+    );
   });
 
   // ─── Render ────────────────────────────────────────────────────────────────
@@ -123,35 +152,6 @@ function NotesContent() {
                 onChange={(e) => setSearchQuery(e.target.value)}
                 className="w-full pl-9 pr-4 py-2 border border-gray-200 rounded-full text-sm focus:outline-none focus:ring-2 focus:ring-[#1c452c]/20 focus:border-[#1c452c]"
               />
-            </div>
-
-            {/* 类型筛选 */}
-            <div className="relative">
-              <button
-                onClick={() => setShowFilter(!showFilter)}
-                className={`flex items-center gap-2 px-4 py-2 rounded-full text-sm border transition-colors
-                  ${filterType !== 'all'
-                    ? 'bg-[#1c452c] text-[#e8dcb8] border-[#1c452c]'
-                    : 'bg-white text-[#5c3d2e] border-gray-200 hover:border-[#1c452c]'
-                  }`}
-              >
-                <Filter className="w-3.5 h-3.5" />
-                {filterType === 'all' ? 'All Types' : filterType.replace('_', ' ')}
-              </button>
-              {showFilter && (
-                <div className="absolute top-full mt-1 left-0 bg-white rounded-xl shadow-lg border border-gray-100 overflow-hidden z-20 w-44">
-                  {NOTE_TYPES.map((type) => (
-                    <button
-                      key={type}
-                      onClick={() => { setFilterType(type); setShowFilter(false); }}
-                      className={`w-full text-left px-4 py-2.5 text-sm capitalize transition-colors
-                        ${filterType === type ? 'bg-[#f0e8d5] text-[#1c452c] font-bold' : 'text-[#5c3d2e] hover:bg-[#f8f4ee]'}`}
-                    >
-                      {type === 'all' ? 'All Types' : type.replace('_', ' ')}
-                    </button>
-                  ))}
-                </div>
-              )}
             </div>
           </div>
 
@@ -182,9 +182,9 @@ function NotesContent() {
         ) : filtered.length === 0 ? (
           <div className="text-center py-20 text-gray-400">
             <p className="text-xl font-medium mb-2">
-              {searchQuery || filterType !== 'all' ? 'No notes match your filter.' : 'No notes yet.'}
+              {searchQuery ? 'No notes match your search.' : 'No notes yet.'}
             </p>
-            {!searchQuery && filterType === 'all' && (
+            {!searchQuery && (
               <p className="text-sm">
                 Start practicing and add notes from the{' '}
                 <button onClick={() => router.push('/')} className="text-[#1c452c] underline">
@@ -217,13 +217,24 @@ function NotesContent() {
                       </span>
                     )}
                   </button>
-                  <button
-                    onClick={() => handleDelete(note.id)}
-                    disabled={deletingId === note.id}
-                    className="text-gray-300 hover:text-red-400 transition-colors ml-2 shrink-0 disabled:opacity-50"
-                  >
-                    <Trash2 className="w-4 h-4" />
-                  </button>
+                  <div className="flex items-center gap-1 ml-2 shrink-0">
+                    <button
+                      onClick={() => startEdit(note)}
+                      disabled={editingId === note.id}
+                      className="text-gray-300 hover:text-[#1c452c] transition-colors disabled:opacity-50"
+                      title="Edit note"
+                    >
+                      <Pencil className="w-4 h-4" />
+                    </button>
+                    <button
+                      onClick={() => handleDelete(note.id)}
+                      disabled={deletingId === note.id}
+                      className="text-gray-300 hover:text-red-400 transition-colors disabled:opacity-50"
+                      title="Delete note"
+                    >
+                      <Trash2 className="w-4 h-4" />
+                    </button>
+                  </div>
                 </div>
 
                 {/* 对应句子原文 */}
@@ -233,16 +244,42 @@ function NotesContent() {
                   </p>
                 )}
 
-                {/* 笔记内容 */}
-                <p className="text-sm text-gray-700 leading-relaxed flex-1">{note.content}</p>
+                {/* 笔记内容（编辑态显示输入框）*/}
+                {editingId === note.id ? (
+                  <div className="flex flex-col gap-2 flex-1">
+                    <textarea
+                      value={editText}
+                      onChange={(e) => setEditText(e.target.value)}
+                      rows={3}
+                      autoFocus
+                      className="w-full text-sm text-gray-700 leading-relaxed border border-gray-200 rounded-lg px-3 py-2 focus:outline-none focus:ring-2 focus:ring-[#1c452c]/20 focus:border-[#1c452c] resize-none"
+                    />
+                    <div className="flex items-center gap-2 justify-end">
+                      <button
+                        onClick={cancelEdit}
+                        disabled={savingId === note.id}
+                        className="flex items-center gap-1 px-3 py-1.5 text-xs text-gray-500 border border-gray-200 rounded-full hover:bg-gray-50 transition-colors disabled:opacity-50"
+                      >
+                        <X className="w-3.5 h-3.5" /> Cancel
+                      </button>
+                      <button
+                        onClick={() => saveEdit(note.id)}
+                        disabled={savingId === note.id || !editText.trim()}
+                        className="flex items-center gap-1 px-3 py-1.5 text-xs text-white bg-[#1c452c] rounded-full hover:bg-[#163a24] transition-colors disabled:opacity-50"
+                      >
+                        {savingId === note.id
+                          ? <Loader2 className="w-3.5 h-3.5 animate-spin" />
+                          : <Check className="w-3.5 h-3.5" />}
+                        Save
+                      </button>
+                    </div>
+                  </div>
+                ) : (
+                  <p className="text-sm text-gray-700 leading-relaxed flex-1">{note.content}</p>
+                )}
 
-                {/* 底部：类型 + 日期 */}
-                <div className="flex items-center justify-between pt-2 border-t border-gray-50">
-                  {note.note_type ? (
-                    <span className="text-xs text-[#8c7355] bg-[#f0e8d5] px-2 py-0.5 rounded-full font-medium capitalize">
-                      {note.note_type.replace('_', ' ')}
-                    </span>
-                  ) : <span />}
+                {/* 底部：日期 */}
+                <div className="flex items-center justify-end pt-2 border-t border-gray-50">
                   <span className="text-xs text-gray-400">{fmtDate(note.created_at)}</span>
                 </div>
               </div>

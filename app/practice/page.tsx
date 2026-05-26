@@ -510,7 +510,7 @@ function PracticeContent() {
 				body: JSON.stringify({
 					material_id: materialId,
 					sentence_id: sentences[currentIdx]?.id ?? null,
-					content: noteText, note_type: 'personal',
+					content: noteText,
 				}),
 			});
 			setNoteText(''); setShowNoteModal(false);
