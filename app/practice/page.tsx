@@ -4,7 +4,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import Link from 'next/link';
 import { useSearchParams, useRouter } from 'next/navigation';
 import { Suspense } from 'react';
-import { PenLine, X, Loader2 } from 'lucide-react';
+import { PenLine, X, Loader2, ArrowLeft } from 'lucide-react';
 import { HomeNavbar } from '../components/HomeNavbar';
 import { useAuth } from '../contexts/AuthContext';
 import { normalizeSentence } from '../utils/text-normalization';
@@ -598,13 +598,31 @@ function PracticeContent() {
 						boxShadow: 'inset 0 6px 10px rgba(255,235,195,0.3), inset 0 -7px 13px rgba(135,75,28,0.14)',
 					}}
 				>
-					<h1 style={{
-						margin: 0, color: '#064f2c',
-						fontFamily: "Georgia,'Times New Roman',serif",
-						fontSize: 'clamp(1.65rem,3vw,3rem)', fontWeight: 800, letterSpacing: '-0.035em',
-					}}>
-						{material.title}
-					</h1>
+					<div style={{ display: 'flex', alignItems: 'center', gap: 16 }}>
+						<button
+							onClick={() => router.push('/')}
+							title="返回首页"
+							aria-label="返回首页"
+							style={{
+								display: 'flex', alignItems: 'center', justifyContent: 'center',
+								width: 42, height: 42, flexShrink: 0,
+								borderRadius: '50%', border: '1px solid rgba(145,86,36,0.35)',
+								background: 'rgba(255,245,225,0.55)', color: '#064f2c',
+								cursor: 'pointer', transition: 'background 0.2s',
+							}}
+							onMouseEnter={(e) => { e.currentTarget.style.background = 'rgba(255,245,225,0.9)'; }}
+							onMouseLeave={(e) => { e.currentTarget.style.background = 'rgba(255,245,225,0.55)'; }}
+						>
+							<ArrowLeft size={22} strokeWidth={2.5} />
+						</button>
+						<h1 style={{
+							margin: 0, color: '#064f2c',
+							fontFamily: "Georgia,'Times New Roman',serif",
+							fontSize: 'clamp(1.65rem,3vw,3rem)', fontWeight: 800, letterSpacing: '-0.035em',
+						}}>
+							{material.title}
+						</h1>
+					</div>
 					<span style={{ color: '#201713', fontSize: 'clamp(1.1rem,1.9vw,2rem)', whiteSpace: 'nowrap', fontWeight: 800 }}>
 						{sentences.length > 0 ? `${currentIdx + 1} / ${sentences.length}` : ''}
 					</span>
